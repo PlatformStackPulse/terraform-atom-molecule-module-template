@@ -22,7 +22,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: python # For any helper scripts; HCL scanned via Trivy
+          languages: actions # Scan GitHub Actions workflows; HCL scanned via Trivy
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
