@@ -1,16 +1,9 @@
 locals {
-  # Naming convention: {namespace}-{environment}-{name}
-  name_prefix = var.namespace != "" ? "${var.namespace}-${var.environment}" : var.environment
-  bucket_name = "${local.name_prefix}-${var.name}"
+  enabled = module.this.enabled
 
-  # Standard tags applied to all resources
-  tags = merge(
-    {
-      "Name"        = local.bucket_name
-      "Environment" = var.environment
-      "ManagedBy"   = "terraform"
-      "Module"      = "example"
-    },
-    var.tags,
-  )
+  # Use tf-label's generated ID for resource naming
+  #bucket_name = module.this.id
+
+  # Standard tags from tf-label, merged with any module-specific tags
+  tags = module.this.tags
 }
