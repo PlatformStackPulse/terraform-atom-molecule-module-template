@@ -83,7 +83,8 @@ jobs:
         run: |
           MODULE_NAME=$(basename "$GITHUB_REPOSITORY")
           VERSION="${{ steps.bump.outputs.version }}"
-          tar -czf "${MODULE_NAME}-${VERSION#v}.tar.gz" \
+          ARCHIVE="${MODULE_NAME}-${VERSION#v}.tar.gz"
+          tar -czf "/tmp/${ARCHIVE}" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='tests' \
@@ -91,7 +92,8 @@ jobs:
             --exclude='.devcontainer' \
             --exclude='.trivyignore' \
             .
-          sha256sum "${MODULE_NAME}-${VERSION#v}.tar.gz" > SHA256SUMS
+          mv "/tmp/${ARCHIVE}" .
+          sha256sum "${ARCHIVE}" > SHA256SUMS
 
       - name: Create GitHub Release
         if: steps.check.outputs.skip == 'false' && steps.bump.outputs.skip != 'true'
