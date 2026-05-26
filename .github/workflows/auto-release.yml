@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   auto-release:
-    name: Create Stable Release
+    name: Create Release
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
@@ -23,46 +23,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for new commits since last stable tag
+      - name: Check if already tagged
         id: check
         run: |
-          LATEST_STABLE=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
-
-          if [[ -z "$LATEST_STABLE" ]]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "latest_tag=" >> "$GITHUB_OUTPUT"
-            echo "No stable tags found — first release"
-            exit 0
-          fi
-
-          # Check if HEAD is already tagged
-          HEAD_TAGS=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
-          if [[ -n "$HEAD_TAGS" ]]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "HEAD already tagged as: $HEAD_TAGS — skipping"
-            exit 0
-          fi
-
-          # Check for commits since last stable tag
-          COMMIT_COUNT=$(git rev-list "${LATEST_STABLE}..HEAD" --count)
-          if [[ "$COMMIT_COUNT" -eq 0 ]]; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "No new commits since $LATEST_STABLE — skipping"
+          if git describe --exact-match HEAD 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "latest_tag=${LATEST_STABLE}" >> "$GITHUB_OUTPUT"
-            echo "$COMMIT_COUNT new commits since $LATEST_STABLE"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Determine version bump
+        if: steps.check.outputs.skip == 'false'
         id: bump
-        if: steps.check.outputs.has_changes == 'true'
         run: |
-          LATEST_TAG="${{ steps.check.outputs.latest_tag }}"
+          # Get the latest stable tag (no pre-release)
+          LATEST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v '-' | head -1)
 
           if [[ -z "$LATEST_TAG" ]]; then
-            echo "version=1.0.0" >> "$GITHUB_OUTPUT"
-            echo "bump_type=initial" >> "$GITHUB_OUTPUT"
+            echo "version=v1.0.0" >> "$GITHUB_OUTPUT"
             echo "First release: v1.0.0"
             exit 0
           fi
@@ -71,37 +49,68 @@ jobs:
           CURRENT="${LATEST_TAG#v}"
           IFS='.' read -r major minor patch <<< "$CURRENT"
 
-          # Analyze commits since last tag for conventional commit prefixes
+          # Check commits since last tag for conventional commit prefixes
           COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s")
 
-          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?!:|BREAKING CHANGE"; then
-            major=$((major + 1)); minor=0; patch=0
-            BUMP_TYPE="major"
-          elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
-            minor=$((minor + 1)); patch=0
-            BUMP_TYPE="minor"
+          BUMP_MAJOR=false
+          BUMP_MINOR=false
+          BUMP_PATCH=false
+
+          while IFS= read -r msg; do
+            if echo "$msg" | grep -qE '^[a-z]+!(\(.+\))?:|BREAKING CHANGE:'; then
+              BUMP_MAJOR=true
+            elif echo "$msg" | grep -qE '^feat(\(.+\))?:'; then
+              BUMP_MINOR=true
+            elif echo "$msg" | grep -qE '^fix(\(.+\))?:'; then
+              BUMP_PATCH=true
+            fi
+          done <<< "$COMMITS"
+
+          if [[ "$BUMP_MAJOR" == "true" ]]; then
+            echo "version=v$((major + 1)).0.0" >> "$GITHUB_OUTPUT"
+          elif [[ "$BUMP_MINOR" == "true" ]]; then
+            echo "version=v${major}.$((minor + 1)).0" >> "$GITHUB_OUTPUT"
+          elif [[ "$BUMP_PATCH" == "true" ]]; then
+            echo "version=v${major}.${minor}.$((patch + 1))" >> "$GITHUB_OUTPUT"
           else
-            patch=$((patch + 1))
-            BUMP_TYPE="patch"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No releasable commits (only chore/ci/docs/test). Skipping."
+            exit 0
           fi
 
-          echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
-          echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "Next version: v${major}.${minor}.${patch} (${BUMP_TYPE} bump)"
-
-      - name: Create and push tag
-        if: steps.check.outputs.has_changes == 'true'
+      - name: Create module archive
+        if: steps.check.outputs.skip == 'false' && steps.bump.outputs.skip != 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.bump.outputs.version }}" -m "Release v${{ steps.bump.outputs.version }}"
-          git push origin "v${{ steps.bump.outputs.version }}"
+          MODULE_NAME=$(basename "$GITHUB_REPOSITORY")
+          VERSION="${{ steps.bump.outputs.version }}"
+          tar -czf "${MODULE_NAME}-${VERSION#v}.tar.gz" \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='tests' \
+            --exclude='scripts' \
+            --exclude='.devcontainer' \
+            --exclude='.trivyignore' \
+            .
+          sha256sum "${MODULE_NAME}-${VERSION#v}.tar.gz" > SHA256SUMS
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.skip == 'false' && steps.bump.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          MODULE_NAME=$(basename "$GITHUB_REPOSITORY")
+
+          gh release create "$VERSION" \
+            --title "Release ${VERSION}" \
+            --generate-notes \
+            "${MODULE_NAME}-${VERSION#v}.tar.gz" \
+            SHA256SUMS
 
       - name: Summary
-        if: steps.check.outputs.has_changes == 'true'
+        if: steps.check.outputs.skip == 'false' && steps.bump.outputs.skip != 'true'
         run: |
-          echo "## Stable Release" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Version**: v${{ steps.bump.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Bump type**: ${{ steps.bump.outputs.bump_type }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Previous**: ${{ steps.check.outputs.latest_tag || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Auto Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version**: ${{ steps.bump.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Triggered by**: CI success on main" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Artifacts**: module archive + SHA256SUMS" >> "$GITHUB_STEP_SUMMARY"
