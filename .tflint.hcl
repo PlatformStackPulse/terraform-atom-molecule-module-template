@@ -9,6 +9,16 @@ rule "terraform_standard_module_structure" {
   enabled = false
 }
 
+# Template: main.tf is empty until atom code is added.
+# These will resolve once a real resource is defined.
+rule "terraform_unused_declarations" {
+  enabled = false
+}
+
+rule "terraform_unused_required_providers" {
+  enabled = false
+}
+
 plugin "aws" {
   enabled = true
   version = "0.37.0"
