@@ -2,7 +2,7 @@
 
 <!-- Badges: Update REPO_OWNER/REPO_NAME after creating from template -->
 [![CI](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
-[![Release](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/release.yml/badge.svg)](../../actions/workflows/release.yml)
+[![Release](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/auto-release.yml/badge.svg)](../../actions/workflows/auto-release.yml)
 [![CodeQL](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/codeql.yml/badge.svg)](../../actions/workflows/codeql.yml)
 [![Changelog](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/changelog.yml/badge.svg)](../../actions/workflows/changelog.yml)
 ![Latest Release](https://img.shields.io/github/v/release/PlatformStackPulse/terraform-atom-molecule-module-template?label=latest%20release&sort=semver)
@@ -180,7 +180,7 @@ Set these repository variables/secrets in GitHub:
 
 ### GitLab Terraform Registry
 
-Uncomment the `publish-gitlab` job in `.github/workflows/release.yml` and set:
+To publish to GitLab, add a `publish-gitlab` job in `.github/workflows/auto-release.yml` and set:
 - `GITLAB_TOKEN` (secret)
 - `GITLAB_PROJECT_ID` (variable)
 
@@ -189,9 +189,8 @@ Uncomment the `publish-gitlab` job in `.github/workflows/release.yml` and set:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yml` | Push (all branches), PR to main, manual | Format, validate, lint, test, security |
-| `auto-release.yml` | CI passes on main | Auto-tag stable release (semver) |
+| `auto-release.yml` | CI passes on main | Auto-tag stable release + GitHub Release + artifacts |
 | `preview-release.yml` | CI passes on feature branch | Create pre-release with branch version |
-| `release.yml` | Tag `v*.*.*` | Create GitHub Release + publish to registries |
 | `codeql.yml` | Weekly + push main | SAST security analysis |
 | `dependencies.yml` | Weekly | Check for provider updates |
 | `changelog.yml` | Push main | Auto-update CHANGELOG.md |
@@ -223,9 +222,7 @@ Other branches/environments can consume preview version
         ↓
 PR merged to main
         ↓
-CI runs on main → Auto Release creates stable tag
-        ↓
-Tag triggers release.yml → GitHub Release + artifacts
+CI runs on main → Auto Release creates stable tag + GitHub Release + artifacts
 ```
 
 ### Consuming Modules
