@@ -188,13 +188,69 @@ Uncomment the `publish-gitlab` job in `.github/workflows/release.yml` and set:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push/PR to main, manual | Format, validate, lint, test, security |
-| `auto-release.yml` | CI passes on main | Auto-tag with semver and trigger release |
+| `ci.yml` | Push (all branches), PR to main, manual | Format, validate, lint, test, security |
+| `auto-release.yml` | CI passes on main | Auto-tag stable release (semver) |
+| `preview-release.yml` | CI passes on feature branch | Create pre-release with branch version |
 | `release.yml` | Tag `v*.*.*` | Create GitHub Release + publish to registries |
 | `codeql.yml` | Weekly + push main | SAST security analysis |
 | `dependencies.yml` | Weekly | Check for provider updates |
 | `changelog.yml` | Push main | Auto-update CHANGELOG.md |
 | `version-bump.yml` | Manual | Bump patch/minor/major version |
+
+## Git & Release Strategy
+
+This template follows **Trunk-Based Development with Preview Artifacts**.
+
+### Versioning
+
+All versions follow [Semantic Versioning 2.0.0](https://semver.org/):
+
+| Type | Format | Example | Source |
+|------|--------|---------|--------|
+| Stable | `MAJOR.MINOR.PATCH` | `v1.4.0` | main branch |
+| Preview | `MAJOR.MINOR.PATCH-BRANCH.RUN` | `v1.5.0-feat-add-ecs.12` | feature branch |
+
+### Release Flow
+
+```
+Developer creates feature branch (feat/*, fix/*, feature/*)
+        ↓
+Push triggers CI (format, validate, lint, test, security)
+        ↓
+CI passes → Preview Release created (pre-release tag)
+        ↓
+Other branches/environments can consume preview version
+        ↓
+PR merged to main
+        ↓
+CI runs on main → Auto Release creates stable tag
+        ↓
+Tag triggers release.yml → GitHub Release + artifacts
+```
+
+### Consuming Modules
+
+**Stable release (production):**
+```hcl
+module "this" {
+  source = "github.com/ORG/REPO?ref=v1.4.0"
+}
+```
+
+**Preview release (testing/integration):**
+```hcl
+module "this" {
+  source = "github.com/ORG/REPO?ref=v1.5.0-feat-add-ecs.12"
+}
+```
+
+### Version Bump Rules (Conventional Commits)
+
+| Commit prefix | Bump | Example |
+|---------------|------|---------|
+| `feat!:` or `BREAKING CHANGE` | Major | `v1.0.0` → `v2.0.0` |
+| `feat:` | Minor | `v1.4.0` → `v1.5.0` |
+| `fix:`, `docs:`, `chore:`, etc. | Patch | `v1.4.0` → `v1.4.1` |
 
 ## Pre-Commit Hooks
 

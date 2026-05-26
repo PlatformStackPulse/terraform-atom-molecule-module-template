@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   auto-release:
-    name: Create Release Tag
+    name: Create Stable Release
     runs-on: ubuntu-latest
     if: >
       github.event.workflow_run.conclusion == 'success' &&
@@ -23,14 +23,46 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check for new commits since last stable tag
+        id: check
+        run: |
+          LATEST_STABLE=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+
+          if [[ -z "$LATEST_STABLE" ]]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=" >> "$GITHUB_OUTPUT"
+            echo "No stable tags found — first release"
+            exit 0
+          fi
+
+          # Check if HEAD is already tagged
+          HEAD_TAGS=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if [[ -n "$HEAD_TAGS" ]]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "HEAD already tagged as: $HEAD_TAGS — skipping"
+            exit 0
+          fi
+
+          # Check for commits since last stable tag
+          COMMIT_COUNT=$(git rev-list "${LATEST_STABLE}..HEAD" --count)
+          if [[ "$COMMIT_COUNT" -eq 0 ]]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No new commits since $LATEST_STABLE — skipping"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "latest_tag=${LATEST_STABLE}" >> "$GITHUB_OUTPUT"
+            echo "$COMMIT_COUNT new commits since $LATEST_STABLE"
+          fi
+
       - name: Determine version bump
         id: bump
+        if: steps.check.outputs.has_changes == 'true'
         run: |
-          # Get the latest tag
-          LATEST_TAG=$(git tag --sort=-version:refname | head -1)
+          LATEST_TAG="${{ steps.check.outputs.latest_tag }}"
 
           if [[ -z "$LATEST_TAG" ]]; then
             echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+            echo "bump_type=initial" >> "$GITHUB_OUTPUT"
             echo "First release: v1.0.0"
             exit 0
           fi
@@ -39,21 +71,26 @@ jobs:
           CURRENT="${LATEST_TAG#v}"
           IFS='.' read -r major minor patch <<< "$CURRENT"
 
-          # Check commits since last tag for conventional commit prefixes
+          # Analyze commits since last tag for conventional commit prefixes
           COMMITS=$(git log "${LATEST_TAG}..HEAD" --pretty=format:"%s")
 
-          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
+          if echo "$COMMITS" | grep -qiE "^(feat|feature)(\(.+\))?!:|BREAKING CHANGE"; then
             major=$((major + 1)); minor=0; patch=0
+            BUMP_TYPE="major"
           elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
             minor=$((minor + 1)); patch=0
+            BUMP_TYPE="minor"
           else
             patch=$((patch + 1))
+            BUMP_TYPE="patch"
           fi
 
           echo "version=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
-          echo "Next version: v${major}.${minor}.${patch}"
+          echo "bump_type=${BUMP_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "Next version: v${major}.${minor}.${patch} (${BUMP_TYPE} bump)"
 
       - name: Create and push tag
+        if: steps.check.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -61,7 +98,10 @@ jobs:
           git push origin "v${{ steps.bump.outputs.version }}"
 
       - name: Summary
+        if: steps.check.outputs.has_changes == 'true'
         run: |
-          echo "## Auto Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Stable Release" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Version**: v${{ steps.bump.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Bump type**: ${{ steps.bump.outputs.bump_type }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Previous**: ${{ steps.check.outputs.latest_tag || 'none' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Triggered by**: CI success on main" >> "$GITHUB_STEP_SUMMARY"
