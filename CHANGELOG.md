@@ -1,6 +1,19 @@
 # Changelog
 
 
+<a name="v1.0.1"></a>
+## [v1.0.1](https://github.com/PlatformStackPulse/Terraform-module-base-template/compare/v1.0.0...v1.0.1) (2026-05-26)
+
+### Bug Fixes
+
+- **ci:** write tar to /tmp to avoid 'file changed as we read it' ([ff53b1c](https://github.com/PlatformStackPulse/Terraform-module-base-template/commit/ff53b1c424d1aaec4dcf9e0c550870f5409e3c3e))
+- **ci:** merge release.yml into auto-release.yml ([4e32c78](https://github.com/PlatformStackPulse/Terraform-module-base-template/commit/4e32c7805f169c7dbe93f6f10a491d6c07846e10))
+
+### Documentation
+
+- **changelog:** update CHANGELOG.md [skip ci] ([129e110](https://github.com/PlatformStackPulse/Terraform-module-base-template/commit/129e110f8d8f845a1c28fe43a00fcc5c25beb667))
+
+
 <a name="v1.0.0"></a>
 ## v1.0.0 (2026-05-26)
 
