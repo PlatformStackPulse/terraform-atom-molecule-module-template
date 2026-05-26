@@ -1,7 +1,13 @@
 # Terraform Module Template
 
-[![CI](https://github.com/PlatformStackPulse/Terraform-module-base-template/actions/workflows/ci.yml/badge.svg)](https://github.com/PlatformStackPulse/Terraform-module-base-template/actions/workflows/ci.yml)
-[![Release](https://github.com/PlatformStackPulse/Terraform-module-base-template/actions/workflows/release.yml/badge.svg)](https://github.com/PlatformStackPulse/Terraform-module-base-template/actions/workflows/release.yml)
+<!-- Badges: Update REPO_OWNER/REPO_NAME after creating from template -->
+[![CI](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![Release](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/release.yml/badge.svg)](../../actions/workflows/release.yml)
+[![CodeQL](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/codeql.yml/badge.svg)](../../actions/workflows/codeql.yml)
+[![Changelog](https://github.com/PlatformStackPulse/terraform-atom-molecule-module-template/actions/workflows/changelog.yml/badge.svg)](../../actions/workflows/changelog.yml)
+![Latest Release](https://img.shields.io/github/v/release/PlatformStackPulse/terraform-atom-molecule-module-template?label=latest%20release&sort=semver)
+![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.6.0-blue?logo=terraform)
+![License](https://img.shields.io/github/license/PlatformStackPulse/terraform-atom-molecule-module-template)
 
 A production-ready template for creating Terraform modules following the **one module per repository** best practice, with built-in CI/CD, security scanning, testing, documentation generation, and publishing to public registries.
 
@@ -14,10 +20,29 @@ A production-ready template for creating Terraform modules following the **one m
 - **Linting** — TFLint with AWS ruleset (preset "all")
 - **Auto Documentation** — terraform-docs generates README sections on every commit
 - **GitHub Actions CI/CD** — Workflows for the full module lifecycle
+- **Auto Release** — CI passes on main → auto-tag → GitHub Release created
 - **Pre-Commit Hooks** — Format, validate, lint, docs, and security on every commit
 - **Conventional Commits** — Enforced commit message format
 - **Semantic Versioning** — Automated version management and releases
 - **DevContainer** — VS Code remote development ready
+
+## CI Pipeline
+
+When a PR is merged to `main`, all CI checks run automatically. On success, a release is created:
+
+```
+PR merged → CI runs → All pass → Auto-tag (semver) → GitHub Release
+```
+
+| Check | Description | Status |
+|-------|-------------|--------|
+| Format | `terraform fmt -check -recursive` | Must pass |
+| Validate | `terraform validate` on module + examples | Must pass |
+| Lint | TFLint with AWS ruleset (preset "all") | Must pass |
+| Test | `terraform test` with mock providers | Must pass |
+| Security | Trivy IaC scan (HIGH/CRITICAL) | Must pass |
+| Docs | terraform-docs freshness check | Must pass |
+| Commit Lint | Conventional commit format (PR only) | Must pass |
 
 ## Quick Start
 
@@ -163,8 +188,9 @@ Uncomment the `publish-gitlab` job in `.github/workflows/release.yml` and set:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push/PR to main | Format, validate, lint, test, security |
-| `release.yml` | Tag v*.*.* | Create GitHub Release + publish to registries |
+| `ci.yml` | Push/PR to main, manual | Format, validate, lint, test, security |
+| `auto-release.yml` | CI passes on main | Auto-tag with semver and trigger release |
+| `release.yml` | Tag `v*.*.*` | Create GitHub Release + publish to registries |
 | `codeql.yml` | Weekly + push main | SAST security analysis |
 | `dependencies.yml` | Weekly | Check for provider updates |
 | `changelog.yml` | Push main | Auto-update CHANGELOG.md |
