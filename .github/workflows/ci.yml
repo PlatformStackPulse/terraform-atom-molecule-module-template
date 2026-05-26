@@ -33,7 +33,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Format Check
-        run: terraform fmt -check -recursive -diff
+        run: make fmt-check
 
   # -----------------------------------------------------------------------
   # Validate
@@ -52,9 +52,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Validate Module
-        run: |
-          terraform init -backend=false
-          terraform validate
+        run: make validate
 
       - name: Validate Examples
         run: |
@@ -91,7 +89,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Lint Module
-        run: tflint
+        run: make lint
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # -----------------------------------------------------------------------
   # Test
@@ -110,9 +110,7 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Run Unit Tests
-        run: |
-          terraform init -backend=false
-          terraform test -filter=tests/unit/ -verbose
+        run: make test-unit
 
   # -----------------------------------------------------------------------
   # Security Scan
@@ -187,9 +185,56 @@ jobs:
 
       - name: Check docs are up to date
         run: |
-          terraform-docs markdown table --output-file README.md --output-mode inject .
+          make docs
           if [[ -n "$(git diff --name-only)" ]]; then
             echo "::error::terraform-docs are out of date. Run 'make docs' and commit."
             git diff
             exit 1
           fi
+
+  # -----------------------------------------------------------------------
+  # Merge Gate
+  # -----------------------------------------------------------------------
+  merge-gate:
+    name: Merge Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - format-check
+      - validate
+      - lint
+      - test
+      - security
+      - docs-check
+      - commit-lint
+    steps:
+      - name: Enforce required checks
+        run: |
+          fail=0
+
+          check_result() {
+            local job_name="$1"
+            local result="$2"
+            if [[ "$result" != "success" ]]; then
+              echo "::error::${job_name} result is ${result}"
+              fail=1
+            fi
+          }
+
+          check_result "Terraform Format" "${{ needs.format-check.result }}"
+          check_result "Terraform Validate" "${{ needs.validate.result }}"
+          check_result "TFLint" "${{ needs.lint.result }}"
+          check_result "Terraform Test" "${{ needs.test.result }}"
+          check_result "Security Scan" "${{ needs.security.result }}"
+          check_result "Documentation" "${{ needs.docs-check.result }}"
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            check_result "Conventional Commits" "${{ needs.commit-lint.result }}"
+          fi
+
+          if [[ "$fail" -ne 0 ]]; then
+            echo "Merge gate failed. Do not merge this PR."
+            exit 1
+          fi
+
+          echo "All required checks passed. Merge gate is green."
